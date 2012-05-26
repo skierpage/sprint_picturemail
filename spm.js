@@ -1,4 +1,4 @@
-var linkWin = open("", "albums", "width=400,height=200,scrollbars,resizable,menubar");
+var linkWin = open("", "albums", "width=400,height=600,scrollbars,resizable");
 var lw = linkWin.document;
 var isJSON = true;
 try {
