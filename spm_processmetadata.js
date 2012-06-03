@@ -26,37 +26,32 @@ var ai = JSON.parse(fs.readFileSync(argv.j)); // "albumInfo"
  */
 
 // Utility functions
-var consume = function consume(obj, key) {
-  var result;
+var checkAndEat = function checkAndEat(objName, obj, key, shouldBe, print) {
+  var value;
   if (obj.hasOwnProperty(key)) {
-    result = obj[key];
+    value = obj[key];
     delete obj[key];
+    if (shouldBe !== undefined && value !== shouldBe) {
+      console.warn("Unexpected ", objName, " info: ", key, " is ", value, " (not", shouldBe, ")");
+    } else if (print === 'print') {
+      console.info(objName, " ", key, " is ", value);
+    }
   } else {
-    console.warn(key, " not in albumInfo?!");
+    console.warn(key, " not in ", objName, "?!");
   }
-  return result;
+  return value;
 };
 
-var albumDatum = function albumDatum(key, shouldBe, print) {
-  var result = consume(ai, key);
-  
-  if (shouldBe !== undefined && result !== shouldBe) {
-    console.warn("Unexpected album info: ", key, " is ", result, " (not", shouldBe, ")");
-  } else if (print === 'print') {
-    console.info(key, " is ", result);
-  }
-  return result;
-};
 
 // starts with {"imageCount":95,"totalMediaItems":127,"mediaIndex":null,"offset":null,
 
-albumDatum("imageCount", undefined, "print");
-var totalMediaItems = albumDatum("totalMediaItems",  undefined, "print");
-albumDatum("mediaIndex", null);
-albumDatum("offset", null);
+checkAndEat("albumInfo", ai, "imageCount", undefined, "print");
+var totalMediaItems = checkAndEat("album info", ai, "totalMediaItems",  undefined, "print");
+checkAndEat("albumInfo", ai, "mediaIndex", null);
+checkAndEat("albumInfo", ai, "offset", null);
 
 // then the rest is a Results array with an entry for each picture or video.
-var elements = albumDatum("Results");
+var elements = checkAndEat("albumInfo", ai, "Results");
 if (! (elements && elements.constructor === Array)) {
   console.error("album info.Results is not an array, exiting!");
   process.exit(1);
@@ -70,54 +65,78 @@ if (len < 1 ) {
   console.warn("album only has ", len, " elements");
 }
 
-var count = 0;
+var i = 0;
 var element, containerID, albumName;
 var photoDirectoryName;
-while ((element = elements.shift())) {
+for (i = 0; i < len; i++) {
+  var objName = "element[" + i + "]";
+  element = elements[i];
   // containerID and albumName should be the same for all elements in one album.
-  if (count === 0) {
-    containerID = element.containerID;
-    albumName = element.albumName;
+  if (i === 0) {
+    containerID = checkAndEat(objName, element, "containerID");
+    albumName = checkAndEat(objName, element, "albumName");
     // the unZIPped directory name is just the albumName with "_1" appended.
     photoDirectoryName = albumName + "_1";
-    var stats;
+    var dirStats;
     try {
-      stats = fs.lstatSync(photoDirectoryName);
+      dirStats = fs.lstatSync(photoDirectoryName);
     } catch (e) {
       console.warn("error lstat'ing ", photoDirectoryName, ": ", e.message);
     }
-    if (! (stats &&  stats.isDirectory())) {
-      console.warn("album does not have a corresponding photo directory named ", photoDirectoryName);
+    if (! (dirStats &&  dirStats.isDirectory())) {
+      console.warn("album does not have a corresponding photo directory named ",
+                   photoDirectoryName);
     }
   } else {
-    if (element.containerID !== containerID) {
-      console.warn("element ", count, " has different containerID (", element.containerID, ") than initial (", containerID, ")");
+    if (checkAndEat(objName, element, "containerID") !== containerID) {
+      console.warn(objName, " has different containerID than initial (", containerID, ")");
     }
-    if (element.albumName !== albumName) {
-      console.warn("element ", count, " has different albumName (", element.albumName, ") than initial (", albumName, ")");
+    if (checkAndEat(objName, element, "albumName") !== albumName) {
+      console.warn(objName, " has different albumName than initial (", albumName, ")");
     }
   }
 
-/*
-For each element in ResultsArray
-
-    warn if containerID different than before (they're all in the same album)
-    warn if hasTransform not false
-    use mediaType and mimeType to determine the  elementExtension in the downloaded ZIP file
-        mimeType: "image\/jpeg" (note backslash...?)  => .jpeg
-        mimeType: "video\/3gpp2" => .mov also
-        mimeType: "video\/mp4v-es" => .mov
-        warn if anything else
-    warn if the file photoDirectoryName/elementID.elementExtension does not exist
-    parse creationDate and spit it out as a command to update the picture file: `touch --no-create --date=creationDate directoryName/elementID.elementExtension`
-    if there's a description, rename the picture file to append it: `mv -i directoryName/elementID.elementExtension directoryName/elementID description.elementExtension
-    warn if audioContainerID not null, hasVoiceCaption not "false", audioElmtID not blank.
-    for URL struct
-        warn if URL.audio is not blank
-        ? ignore thumb?
-        if mediaType is "VIDEO" and URL.image is non-blank, e.g. /m/NNNNNNNN_0.mp4v-es?iconifyVideo=true&outquality=56 then either download or spit out a link to it removing the outquality parameter and the _0 (size) before the extension.
+  checkAndEat(objName, element, "hasTransform", false);
+  var elementID = checkAndEat(objName, element, "elementID");
+  var mediaType = checkAndEat(objName, element, "mediaType");
+  if (mediaType !== "VIDEO" && mediaType !== "IMAGE") {
+    console.warn("element ", i, "has unexpected mediaType ", mediaType);
+  }
+  var mimeType = checkAndEat(objName, element, "mimeType");
+  var extension;
+  switch(mimeType) {
+    case "image\/jpeg":
+      extension = ".jpeg";
+      break;
+    case "video\/3gpp2":
+    case "video\/mp4v-es":
+      extension = ".mov";
+      break;
+    default:
+      console.warn(objName, " has unexpected mimeType ", mimeType);
+  }
+  var filePath = photoDirectoryName + "/" + elementID + extension;
+  var stats = null;;
+  try {
+    stats = fs.statSync(filePath);
+  } catch (e) {
+    console.warn("error stat'ing ", filePath, ": ", e.message);
+  }
+  if (! (stats && stats.isFile())) {
+    console.warn(objName, " not found at path ", filePath);
+  }
+  // parse creationDate and spit it out as a command to update the picture file: `touch --no-create --date=creationDate directoryName/elementID.elementExtension`
+  // if there's a description, rename the picture file to append it: `mv -i directoryName/elementID.elementExtension directoryName/elementID description.elementExtension
+  checkAndEat(objName, element, "audioContainerID", null);
+  checkAndEat(objName, element, "hasVoiceCaption", "false");
+  checkAndEat(objName, element, "audioElmtID", "");
+  /*
+  for URL struct
+      warn if URL.audio is not blank
+      ? ignore thumb?
+      if mediaType is "VIDEO" and URL.image is non-blank, e.g. /m/NNNNNNNN_0.mp4v-es?iconifyVideo=true&outquality=56 then either download or spit out a link to it removing the outquality parameter and the _0 (size) before the extension.
  */
-  count++;
+
 }
 
 // There should be nothing left!
