@@ -159,7 +159,7 @@ for (i = 0; i < len; i++) {
   /*
       if mediaType is "VIDEO" and URL.image is non-blank, e.g. /m/NNNNNNNN_0.mp4v-es?iconifyVideo=true&outquality=56 then either download or spit out a link to it removing the outquality parameter and the _0 (size) before the extension.
  */
-  if (mediaType === "VIDEO" && imageURL !== "") {
+  if (mediaType === "VIDEO" && imageURL !== "" && imageURL !== null) {
     console.warn("TODO: video", filePath, "has a poster image", imageURL);
   }
   // images shouldn't have a videoURL, but SPM has a bug:
@@ -169,7 +169,7 @@ for (i = 0; i < len; i++) {
   if (mediaType === "VIDEO") {
     seenVideoURLs.push(videoURL);
   }
-  if (mediaType === "IMAGE" && videoURL !== "") {
+  if (mediaType === "IMAGE" && videoURL !== "" && videoURL !== null) {
     // ... and before warning about an image with a videoURL, see if it's a video we've seen.
     if (seenVideoURLs.indexOf(videoURL) === -1) {
       console.warn("unexpected!!", objName, "is the image", filePath, "but also has a video URL", videoURL);
@@ -188,7 +188,7 @@ for (i = 0; i < len; i++) {
 
 // There should be nothing left!
 if (Object.keys(ai).length !== 0) {
-  console.warn("At end, still stuff in ai", ai);
+  console.warn("At end, still stuff in albumInfo", ai);
 } else {
-  console.info("At end, nothing left in ai (good!)");
+  console.info("At end, nothing left in albumInfo (good!)");
 }
