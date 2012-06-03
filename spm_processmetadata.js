@@ -5,7 +5,9 @@
 //
 // I gave up on performing the login.
 
-"use strict"
+/*jshint globalstrict:true */
+/*global require:false, console:false, process:false */
+"use strict";
 
 // from https://github.com/substack/node-optimist
 var argv = require('optimist')
@@ -25,7 +27,7 @@ var ai = JSON.parse(fs.readFileSync(argv.j)); // "albumInfo"
 
 // Utility functions
 var consume = function consume(obj, key) {
-  var result = undefined;
+  var result;
   if (obj.hasOwnProperty(key)) {
     result = obj[key];
     delete obj[key];
@@ -33,7 +35,7 @@ var consume = function consume(obj, key) {
     console.warn(key, " not in albumInfo?!");
   }
   return result;
-}
+};
 
 var albumDatum = function albumDatum(key, shouldBe, print) {
   var result = consume(ai, key);
@@ -43,23 +45,49 @@ var albumDatum = function albumDatum(key, shouldBe, print) {
   } else if (print === 'print') {
     console.info(key, " is ", result);
   }
-}
+  return result;
+};
 
 // starts with {"imageCount":95,"totalMediaItems":127,"mediaIndex":null,"offset":null,
 
 albumDatum("imageCount", undefined, "print");
-albumDatum("totalMediaItems",  undefined,"print");
+var totalMediaItems = albumDatum("totalMediaItems",  undefined, "print");
 albumDatum("mediaIndex", null);
-albumDatum("offset", 23);
+albumDatum("offset", null);
+
+// then the rest is a Results array with an entry for each picture or video.
+var elements = albumDatum("Results");
+if (! (elements && elements.constructor === Array)) {
+  console.error("album info.Results is not an array, exiting!");
+  process.exit(1);
+}
+
+var len = elements.length;
+if (len !== totalMediaItems ) {
+  console.warn("album length ", len, " doesn't match totalMediaItems ", totalMediaItems);
+}
+if (len < 1 ) {
+  console.warn("album only has ", len, " elements");
+}
+
+var count = 0;
+var element, containerID, albumName;
+while ((element = elements.shift())) {
+  // containerID and albumName should be the same for all elements in one album.
+  if (count === 0) {
+    containerID = element.containerID;
+    albumName = element.albumName;
+    // map albumName to photoDirectoryName (just add "_1"?), and verify it exists — that's where the pictures should be.
+  } else {
+    if (element.containerID !== containerID) {
+      console.warn("element ", count, " has different containerID (", element.containerID, ") than initial (", containerID, ")");
+    }
+    if (element.albumName !== albumName) {
+      console.warn("element ", count, " has different albumName (", element.albumName, ") than initial (", albumName, ")");
+    }
+  }
 
 /*
-then the rest is a Results array with an entry for each picture or video.
-
-If first item in Results array
-
-    note containerID and albumName. These should be the same for all elements in one album.
-    map albumName to photoDirectoryName (replace " " with "_"), and verify it exists — that's where the pictures should be.
-
 For each element in ResultsArray
 
     warn if containerID different than before (they're all in the same album)
@@ -78,6 +106,7 @@ For each element in ResultsArray
         ? ignore thumb?
         if mediaType is "VIDEO" and URL.image is non-blank, e.g. /m/NNNNNNNN_0.mp4v-es?iconifyVideo=true&outquality=56 then either download or spit out a link to it removing the outquality parameter and the _0 (size) before the extension.
  */
+}
 
 // There should be nothing left!
 if (Object.keys(ai).length !== 0) {
