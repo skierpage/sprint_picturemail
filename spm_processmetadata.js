@@ -32,12 +32,12 @@ var checkAndEat = function checkAndEat(objName, obj, key, shouldBe, print) {
     value = obj[key];
     delete obj[key];
     if (shouldBe !== undefined && value !== shouldBe) {
-      console.warn("Unexpected ", objName, " info: ", key, " is ", value, " (not", shouldBe, ")");
+      console.warn("Unexpected", objName, "info:", key, "is", value, "(not", shouldBe, ")");
     } else if (print === 'print') {
-      console.info(objName, " ", key, " is ", value);
+      console.info(objName, key, "is", value);
     }
   } else {
-    console.warn(key, " not in ", objName, "?!");
+    console.warn(key, "not in", objName, "?!");
   }
   return value;
 };
@@ -59,14 +59,17 @@ if (! (elements && elements.constructor === Array)) {
 
 var len = elements.length;
 if (len !== totalMediaItems ) {
-  console.warn("album length ", len, " doesn't match totalMediaItems ", totalMediaItems);
+  console.warn("album length", len, "doesn't match totalMediaItems", totalMediaItems);
 }
 if (len < 1 ) {
-  console.warn("album only has ", len, " elements");
+  console.warn("album only has", len, "elements");
 }
 
+/**
+ * Iterate through array of picture/video info.
+ */
 var i = 0;
-var element, containerID, albumName;
+var element, containerID, albumName, seenVideoURLs = [];
 var photoDirectoryName;
 for (i = 0; i < len; i++) {
   var objName = "element[" + i + "]";
@@ -81,7 +84,7 @@ for (i = 0; i < len; i++) {
     try {
       dirStats = fs.lstatSync(photoDirectoryName);
     } catch (e) {
-      console.warn("error lstat'ing ", photoDirectoryName, ": ", e.message);
+      console.warn("error lstat'ing", photoDirectoryName, ":", e.message);
     }
     if (! (dirStats &&  dirStats.isDirectory())) {
       console.warn("album does not have a corresponding photo directory named ",
@@ -89,18 +92,23 @@ for (i = 0; i < len; i++) {
     }
   } else {
     if (checkAndEat(objName, element, "containerID") !== containerID) {
-      console.warn(objName, " has different containerID than initial (", containerID, ")");
+      console.warn(objName, "has different containerID than initial (", containerID, ")");
     }
     if (checkAndEat(objName, element, "albumName") !== albumName) {
-      console.warn(objName, " has different albumName than initial (", albumName, ")");
+      console.warn(objName, "has different albumName than initial (", albumName, ")");
     }
   }
 
   checkAndEat(objName, element, "hasTransform", false);
+  var mediaItemNum = checkAndEat(objName, element, "mediaItemNum");
+  if (mediaItemNum !== i) {
+    console.warn(objName, "has different mediaItemNum (",
+                 mediaItemNum, ") than current id", i, "(probably not important)");
+  }
   var elementID = checkAndEat(objName, element, "elementID");
   var mediaType = checkAndEat(objName, element, "mediaType");
   if (mediaType !== "VIDEO" && mediaType !== "IMAGE") {
-    console.warn("element ", i, "has unexpected mediaType ", mediaType);
+    console.warn("element", i, "has unexpected mediaType", mediaType);
   }
   var mimeType = checkAndEat(objName, element, "mimeType");
   var extension;
@@ -113,30 +121,70 @@ for (i = 0; i < len; i++) {
       extension = ".mov";
       break;
     default:
-      console.warn(objName, " has unexpected mimeType ", mimeType);
+      console.warn(objName, "has unexpected mimeType", mimeType);
   }
   var filePath = photoDirectoryName + "/" + elementID + extension;
-  var stats = null;;
+  var stats = null;
   try {
     stats = fs.statSync(filePath);
   } catch (e) {
-    console.warn("error stat'ing ", filePath, ": ", e.message);
+    console.warn("error stat'ing", filePath, ":", e.message);
   }
   if (! (stats && stats.isFile())) {
-    console.warn(objName, " not found at path ", filePath);
+    console.warn(objName, "not found at path", filePath);
   }
-  // parse creationDate and spit it out as a command to update the picture file: `touch --no-create --date=creationDate directoryName/elementID.elementExtension`
-  // if there's a description, rename the picture file to append it: `mv -i directoryName/elementID.elementExtension directoryName/elementID description.elementExtension
+  var creationDate = checkAndEat(objName, element, "creationDate");
+  if (creationDate !== '') {
+    console.warn("   TODO: parse creationDate and spit it out as a command to update the picture file: `touch --no-create --date=creationDate directoryName/elementID.elementExtension`");
+  } else {
+    console.warn(objName, "has blank creationDate?!");
+  }
+  var description = checkAndEat(objName, element, "description");
+  if (description !== "") {
+    console.warn("  TODO: rename the picture file to append description", description);
+    // fs.renameSync(filePath, "directoryName/elementID cleanedDescription.elementExtension");
+  }
   checkAndEat(objName, element, "audioContainerID", null);
   checkAndEat(objName, element, "hasVoiceCaption", "false");
   checkAndEat(objName, element, "audioElmtID", "");
+
+  // URL struct
+  var urls = checkAndEat(objName, element, "URL");
+  var urlsName = objName + ".URL";
+  checkAndEat(urlsName, urls, "audio", ""); // always blank!?
+  checkAndEat(urlsName, urls, "thumb"); // don't care about thumbnail?
+  var imageURL = checkAndEat(urlsName, urls, "image");
+
+  var videoURL = checkAndEat(urlsName, urls, "video");
   /*
-  for URL struct
-      warn if URL.audio is not blank
-      ? ignore thumb?
       if mediaType is "VIDEO" and URL.image is non-blank, e.g. /m/NNNNNNNN_0.mp4v-es?iconifyVideo=true&outquality=56 then either download or spit out a link to it removing the outquality parameter and the _0 (size) before the extension.
  */
-
+  if (mediaType === "VIDEO" && imageURL !== "") {
+    console.warn("TODO: video", filePath, "has a poster image", imageURL);
+  }
+  // images shouldn't have a videoURL, but SPM has a bug:
+  // after it's seen a video it'll spit out that videoURL with slight alterations for subsequent images.
+  // e.g. after contenttype=application/x-quicktimeplayer
+  // So remember videoURLs...
+  if (mediaType === "VIDEO") {
+    seenVideoURLs.push(videoURL);
+    console.log("remembered a videoURL, seenVideoURLs now", seenVideoURLs);
+  }
+  if (mediaType === "IMAGE" && videoURL !== "") {
+    // ... and before warning about an image with a videoURL, see if it's one we've seen.
+    if (seenVideoURLs.indexOf(videoURL) === -1) {
+      console.warn("unexpected!!", objName, "is the image", filePath, "but also has a video URL", videoURL);
+    } else {
+      console.info("   (SPM bug", objName, "is the image", filePath, "but has the same video URL as", seenVideoURLs.indexOf(videoURL), ")");
+    }
+  }
+  if (Object.keys(urls).length !== 0) {
+    console.warn("still stuff in", urlsName, ":", urls);
+  }
+  // by end, element should be empty.
+  if (Object.keys(element).length !== 0) {
+    console.warn("still stuff in", objName, ":", element);
+  }
 }
 
 // There should be nothing left!
