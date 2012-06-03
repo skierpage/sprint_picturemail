@@ -7,6 +7,7 @@
 
 /*jshint globalstrict:true */
 /*global require:false, console:false, process:false */
+"use strict";
 
 // from https://github.com/substack/node-optimist
 var argv = require('optimist')
@@ -39,21 +40,6 @@ var checkAndEat = function checkAndEat(objName, obj, key, shouldBe, print) {
     console.warn(key, "not in", objName, "?!");
   }
   return value;
-};
-
-
-/*jshint esnext:true */
-// E.g. "Nov 29, 2006" -> 20061129
-var parseDate = function parseDate(date) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const re = /,? /;
-  const dateParts = date.split(re);
-  const month = months.indexOf(dateParts[0]) + 1;
-  const day = dateParts[1];
-  const year = dateParts[2];
-  return year + (month < 10 ? "0" : "") + month + (day < 10 ? "0" : "") + day;
-
-  // should I return the entire touch(1) timestamp, e.g. 200611291200 ?
 };
 
 
@@ -149,8 +135,7 @@ for (i = 0; i < len; i++) {
   }
   var creationDate = checkAndEat(objName, element, "creationDate");
   if (creationDate !== '') {
-    var uploadedTimestamp = parseDate(creationDate) + "1200"; 
-    console.warn("   `touch -t", uploadedTimestamp, "'" + filePath + "'` # creationDate=", creationDate);
+    console.warn("   `touch --date='" + creationDate + "' '" + filePath + "'`");
   } else {
     console.warn(objName, "has blank creationDate?!");
   }
@@ -183,7 +168,6 @@ for (i = 0; i < len; i++) {
   // So remember videoURLs...
   if (mediaType === "VIDEO") {
     seenVideoURLs.push(videoURL);
-    console.log("remembered a videoURL, seenVideoURLs now", seenVideoURLs);
   }
   if (mediaType === "IMAGE" && videoURL !== "") {
     // ... and before warning about an image with a videoURL, see if it's a video we've seen.
