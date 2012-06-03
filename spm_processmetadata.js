@@ -72,12 +72,23 @@ if (len < 1 ) {
 
 var count = 0;
 var element, containerID, albumName;
+var photoDirectoryName;
 while ((element = elements.shift())) {
   // containerID and albumName should be the same for all elements in one album.
   if (count === 0) {
     containerID = element.containerID;
     albumName = element.albumName;
-    // map albumName to photoDirectoryName (just add "_1"?), and verify it exists — that's where the pictures should be.
+    // the unZIPped directory name is just the albumName with "_1" appended.
+    photoDirectoryName = albumName + "_1";
+    var stats;
+    try {
+      stats = fs.lstatSync(photoDirectoryName);
+    } catch (e) {
+      console.warn("error lstat'ing ", photoDirectoryName, ": ", e.message);
+    }
+    if (! (stats &&  stats.isDirectory())) {
+      console.warn("album does not have a corresponding photo directory named ", photoDirectoryName);
+    }
   } else {
     if (element.containerID !== containerID) {
       console.warn("element ", count, " has different containerID (", element.containerID, ") than initial (", containerID, ")");
@@ -106,6 +117,7 @@ For each element in ResultsArray
         ? ignore thumb?
         if mediaType is "VIDEO" and URL.image is non-blank, e.g. /m/NNNNNNNN_0.mp4v-es?iconifyVideo=true&outquality=56 then either download or spit out a link to it removing the outquality parameter and the _0 (size) before the extension.
  */
+  count++;
 }
 
 // There should be nothing left!
