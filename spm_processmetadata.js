@@ -7,7 +7,6 @@
 
 /*jshint globalstrict:true */
 /*global require:false, console:false, process:false */
-"use strict";
 
 // from https://github.com/substack/node-optimist
 var argv = require('optimist')
@@ -40,6 +39,21 @@ var checkAndEat = function checkAndEat(objName, obj, key, shouldBe, print) {
     console.warn(key, "not in", objName, "?!");
   }
   return value;
+};
+
+
+/*jshint esnext:true */
+// E.g. "Nov 29, 2006" -> 20061129
+var parseDate = function parseDate(date) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const re = /,? /;
+  const dateParts = date.split(re);
+  const month = months.indexOf(dateParts[0]) + 1;
+  const day = dateParts[1];
+  const year = dateParts[2];
+  return year + (month < 10 ? "0" : "") + month + (day < 10 ? "0" : "") + day;
+
+  // should I return the entire touch(1) timestamp, e.g. 200611291200 ?
 };
 
 
@@ -135,7 +149,8 @@ for (i = 0; i < len; i++) {
   }
   var creationDate = checkAndEat(objName, element, "creationDate");
   if (creationDate !== '') {
-    console.warn("   TODO: parse creationDate and spit it out as a command to update the picture file: `touch --no-create --date=creationDate directoryName/elementID.elementExtension`");
+    var uploadedTimestamp = parseDate(creationDate) + "1200"; 
+    console.warn("   `touch -t", uploadedTimestamp, "'" + filePath + "'` # creationDate=", creationDate);
   } else {
     console.warn(objName, "has blank creationDate?!");
   }
@@ -171,11 +186,11 @@ for (i = 0; i < len; i++) {
     console.log("remembered a videoURL, seenVideoURLs now", seenVideoURLs);
   }
   if (mediaType === "IMAGE" && videoURL !== "") {
-    // ... and before warning about an image with a videoURL, see if it's one we've seen.
+    // ... and before warning about an image with a videoURL, see if it's a video we've seen.
     if (seenVideoURLs.indexOf(videoURL) === -1) {
       console.warn("unexpected!!", objName, "is the image", filePath, "but also has a video URL", videoURL);
     } else {
-      console.info("   (SPM bug", objName, "is the image", filePath, "but has the same video URL as", seenVideoURLs.indexOf(videoURL), ")");
+      // console.info("   (SPM bug", objName, "is the image", filePath, "but has the same video URL as", seenVideoURLs.indexOf(videoURL), ")");
     }
   }
   if (Object.keys(urls).length !== 0) {
