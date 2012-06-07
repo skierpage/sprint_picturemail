@@ -216,7 +216,7 @@ for (i = 0; i < len; i++) {
         console.error("error opening", moreLinks, ":", e.message);
         process.exit(2);
       }
-      fs.writeSync(moreLinksFD, "<h3>More to download for " + albumName + "</h3>\n");
+      fs.writeSync(moreLinksFD, '<base href="http://pictures.sprintpcs.com">\n<h3>More to download for " + albumName + "</h3>\n');
     }
     moreToDownload++;
     fsStr = '<a href="' + imageURL + '">poster image for video ' + filePath + "</a><br>\n";
