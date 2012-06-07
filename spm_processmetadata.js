@@ -17,24 +17,29 @@ var argv = require('optimist')
     .describe('j', 'album info retrieved from getMediaContainerJSON.do')
     .argv;
 
+// for reading album info.json, maybe writing HTML
+var fs = require('fs');
+
 // for `touch` subprocess
 var spawn = require('child_process').spawn;
 var fnTouchOut = function fnTouchOut (data) {
-      console.log('touch stdout: ' + data);
+  console.log('touch stdout: ' + data);
 };
 var fnTouchErr = function touchErr (data) {
-      console.warn('touch stderr: ' + data);
+  console.warn('touch stderr: ' + data);
 };
 var fnTouchExit = function touchExit (code) {
-      console.log('child touch process exited with code ' + code);
+  if (code !== 0) {
+    console.warn('child touch process exited with non-zero code ' + code);
+  }
 };
 
 // for fs.renameSync
 var fsCleanDescription, fsNewPath;
 
-// for writing additional files
-var fs = require('fs'), fsStr, fsWritten;
-var moreLinksFD;                              // for printing additional download links
+// for writing additional file
+var fsStr, fsWritten;
+var moreLinks, moreLinksFD, moreToDownload = 0;
 
 
 // OK, let's parse some metadata
@@ -91,12 +96,6 @@ var i = 0;
 var element, containerID, albumName, seenVideoURLs = [];
 var photoDirectoryName;
 
-try {
-  moreLinksFD   = fs.openSync("more_to_download.html", 'w+');
-} catch (e) {
-  console.error("error opening touch.sh:", e.message);
-  process.exit(2);
-}
 for (i = 0; i < len; i++) {
   var objName = "element[" + i + "]";
   element = elements[i];
@@ -209,8 +208,18 @@ for (i = 0; i < len; i++) {
       if mediaType is "VIDEO" and URL.image is non-blank, e.g. /m/NNNNNNNN_0.mp4v-es?iconifyVideo=true&outquality=56 then either download or spit out a link to it removing the outquality parameter and the _0 (size) before the extension.
  */
   if (mediaType === "VIDEO" && imageURL !== "" && imageURL !== null) {
-    console.log("writing a link to download video", filePath, "'s poster image", imageURL);
-    fsStr = '<a href="' + imageURL + '">poster image for video ' + filePath + "</a>\n";
+    if (moreToDownload === 0) {
+      try {
+        moreLinks = albumName + "_more_to_download.html";
+        moreLinksFD   = fs.openSync(moreLinks, 'w+');
+      } catch (e) {
+        console.error("error opening", moreLinks, ":", e.message);
+        process.exit(2);
+      }
+      fs.writeSync(moreLinksFD, "<h3>More to download for " + albumName + "</h3>\n");
+    }
+    moreToDownload++;
+    fsStr = '<a href="' + imageURL + '">poster image for video ' + filePath + "</a><br>\n";
     if ( (fsWritten = fs.writeSync(moreLinksFD, fsStr)) != fsStr.length) {
       console.warn('error, only wrote', fsWritten, 'bytes of', fsStr.length, '-long string:', fsStr);
     }
@@ -244,4 +253,7 @@ if (Object.keys(ai).length !== 0) {
   console.warn("At end, still stuff in albumInfo", ai);
 } else {
   console.info("At end, nothing left in albumInfo (good!)");
+}
+if (moreToDownload > 0) {
+      console.log("wrote", moreToDownload, "link(s) to download stuff in", moreLinks);
 }
