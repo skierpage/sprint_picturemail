@@ -17,8 +17,27 @@ var argv = require('optimist')
     .describe('j', 'album info retrieved from getMediaContainerJSON.do')
     .argv;
 
-var fs = require('fs');
+// for `touch` subprocess
+var spawn = require('child_process').spawn;
+var fnTouchOut = function fnTouchOut (data) {
+      console.log('touch stdout: ' + data);
+};
+var fnTouchErr = function touchErr (data) {
+      console.warn('touch stderr: ' + data);
+};
+var fnTouchExit = function touchExit (code) {
+      console.log('child touch process exited with code ' + code);
+};
 
+// for fs.renameSync
+var fsCleanDescription, fsNewPath;
+
+// for writing additional files
+var fs = require('fs'), fsStr, fsWritten;
+var moreLinksFD;                              // for printing additional download links
+
+
+// OK, let's parse some metadata
 var ai = JSON.parse(fs.readFileSync(argv.j)); // "albumInfo"
 
 /*
@@ -71,6 +90,13 @@ if (len < 1 ) {
 var i = 0;
 var element, containerID, albumName, seenVideoURLs = [];
 var photoDirectoryName;
+
+try {
+  moreLinksFD   = fs.openSync("more_to_download.html", 'w+');
+} catch (e) {
+  console.error("error opening touch.sh:", e.message);
+  process.exit(2);
+}
 for (i = 0; i < len; i++) {
   var objName = "element[" + i + "]";
   element = elements[i];
@@ -133,16 +159,39 @@ for (i = 0; i < len; i++) {
   if (! (stats && stats.isFile())) {
     console.warn(objName, "not found at path", filePath);
   }
-  var creationDate = checkAndEat(objName, element, "creationDate");
-  if (creationDate !== '') {
-    console.warn("   `touch --date='" + creationDate + "' '" + filePath + "'`");
-  } else {
-    console.warn(objName, "has blank creationDate?!");
-  }
   var description = checkAndEat(objName, element, "description");
   if (description !== "") {
-    console.warn("  TODO: rename the picture file to append description", description);
-    // fs.renameSync(filePath, "directoryName/elementID cleanedDescription.elementExtension");
+    //  Keeping Sprint's meaningless name, TODO: should I discard it?
+    fsCleanDescription = description.replace(/[.?$"'\\\/]/g, '_') // bad chars
+                                         .replace(/^\s +/, '')  // trim front
+                                         .replace(/\s+$/, '');  // trim end
+    var fsNewPath = photoDirectoryName + "/" + elementID + ' - ' + fsCleanDescription + extension;
+    if (fsNewPath.length > 100) {
+      fsNewPath = fsNewPath.substr(0, 99);
+      console.warn("for", elementID, "planned new name ", fsNewPath, "was too long, check!");
+    }
+    if (fsNewPath !== filePath) {
+      try {
+        fs.renameSync(filePath, fsNewPath);
+        filePath = fsNewPath;
+      } catch (e) {
+        console.warn("problem renameSync to", fsNewPath, ":", e.message);
+      }
+    }
+  }
+
+  // (filePath may have changed...)
+  var creationDate = checkAndEat(objName, element, "creationDate");
+  if (creationDate !== '') {
+    // Spawn a child process to touch the file to set the date modified.
+    // It seems I don't have to quote the date or filePath, no shell.
+    var touch = spawn('touch', ["--date=" + creationDate, filePath]);
+    touch.stdout.on('data', fnTouchOut);
+    touch.stderr.on('data', fnTouchErr);
+    touch.on('exit', fnTouchExit);
+    // I think nothing depends on this touch, so OK to continue on.
+  } else {
+    console.warn(objName, "has blank creationDate?!");
   }
   checkAndEat(objName, element, "audioContainerID", null);
   checkAndEat(objName, element, "hasVoiceCaption", "false");
@@ -160,7 +209,11 @@ for (i = 0; i < len; i++) {
       if mediaType is "VIDEO" and URL.image is non-blank, e.g. /m/NNNNNNNN_0.mp4v-es?iconifyVideo=true&outquality=56 then either download or spit out a link to it removing the outquality parameter and the _0 (size) before the extension.
  */
   if (mediaType === "VIDEO" && imageURL !== "" && imageURL !== null) {
-    console.warn("TODO: video", filePath, "has a poster image", imageURL);
+    console.log("writing a link to download video", filePath, "'s poster image", imageURL);
+    fsStr = '<a href="' + imageURL + '">poster image for video ' + filePath + "</a>\n";
+    if ( (fsWritten = fs.writeSync(moreLinksFD, fsStr)) != fsStr.length) {
+      console.warn('error, only wrote', fsWritten, 'bytes of', fsStr.length, '-long string:', fsStr);
+    }
   }
   // images shouldn't have a videoURL, but SPM has a bug:
   // after it's seen a video it'll spit out that videoURL with slight alterations for subsequent images.
