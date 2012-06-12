@@ -161,9 +161,10 @@ for (i = 0; i < len; i++) {
   var description = checkAndEat(objName, element, "description");
   if (description !== "") {
     //  Keeping Sprint's meaningless name, TODO: should I discard it?
-    fsCleanDescription = description.replace(/[.?$"'\\\/]/g, '_') // bad chars
-                                         .replace(/^\s +/, '')  // trim front
-                                         .replace(/\s+$/, '');  // trim end
+    fsCleanDescription = description.replace(/&#\d+;//g, '_') // HTML entities, e.g. Gill&#039;s kitchen
+                                    .replace(/[.?$"'\\\/]/g, '_') // bad chars
+                                    .replace(/^\s +/, '')  // trim front
+                                    .replace(/\s+$/, '');  // trim end
     var fsNewPath = photoDirectoryName + "/" + elementID + ' - ' + fsCleanDescription + extension;
     if (fsNewPath.length > 100) {
       fsNewPath = fsNewPath.substr(0, 99);
